@@ -15,7 +15,10 @@ dhs_data <- read_dhs_data("data/dhs_model_data.dta")
 data_sample <- sample_households(100, dhs_data)
 
 # Plot full DHS data set
-plot_households(dhs_data)
+g_dhs <- plot_households(dhs_data)
+ggsave("figures/household_structure_dhs.png", g_dhs)
+
 
 # Plot sampled data set
-plot_households(data_sample)
+g_sample <- plot_households(data_sample)
+ggsave("figures/household_structure_sample.png", g_sample)
