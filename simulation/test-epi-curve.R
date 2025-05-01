@@ -1,6 +1,7 @@
 
 library(tidyverse)
 library(patchwork)
+library(ggridges)
 
 source("R/household_structure.R")
 
@@ -10,7 +11,7 @@ options(scipen = 100)
 x <- seq(0, 365, 1)
 y <- dlnorm(x, meanlog = 4.5, sdlog = 0.4)
 df <- data.frame(date = x, inst = y)
-write.table(df, "simulation/outputs/epi-curve.csv", row.names = FALSE, quote = FALSE,
+write.table(df, "simulation/epi-curve.csv", row.names = FALSE, quote = FALSE,
             col.names = F, sep = ",")
 
 ggplot(df, aes(x = date, y = inst)) +
@@ -32,7 +33,13 @@ hhmodel$load_param_list(
   ctct_adult2senior = 0.75,
   ctct_senior2child = 0.5,
   ctct_senior2adult = 0.75,
-  ctct_senior2senior = 0.75
+  ctct_senior2senior = 0.75,
+  com_child = 1,
+  com_senior = 0.5,
+  inf_child = 1,
+  inf_senior = 1,
+  sus_child = 1,
+  sus_senior = 0.4
 )
 
 # In gamma dist mean = shape / rate
