@@ -3,7 +3,7 @@ library(data.table)
 setwd("~/Documents/GitHub/household-study-data/")
 source("R/recruitment_functions.R")
 # Read in the linelist
-linelist <- read_csv("data/dummy-output.csv")
+linelist <- read_csv("simulation/outputs/simulated_infections.csv")
 head(linelist)
 
 dt <- 1
@@ -24,12 +24,13 @@ expanded_linelist <- expanded_linelist %>%
          onset_date_end=onset_date_start+7)
 data_hh <- as.data.table(expanded_linelist)
 
-study_design <- list(test_pos_height=7,specificity_test=1,sensitivity_symptoms=1,specificity_symptoms=1,probability_enrollment=1)
 
-inf_mean <- 5
-inf_var <- 10
+inf_mean <- 3
+inf_var <- 1.25
 scale=inf_var/inf_mean
 shape=inf_mean/scale
+
+study_design <- list(test_pos_height=0.9/max(dgamma(seq(0,30,by=0.1),shape=shape,scale=scale)),specificity_test=1,sensitivity_symptoms=1,specificity_symptoms=1,probability_enrollment=1)
 
 ggplot(data.frame(x=seq(0,30,by=0.1),y=probability_positive(seq(0,30,by=0.1),shape=shape,scale=scale,design=study_design))) + 
   geom_line(aes(x=x,y=y)) +
@@ -38,10 +39,6 @@ ggplot(data.frame(x=seq(0,30,by=0.1),y=probability_positive(seq(0,30,by=0.1),sha
   xlab("Time since infection (days)") +
   scale_fill_viridis_c() +
   theme(legend.position="bottom")
-
-data_hh[,inf_mean:=5]
-data_hh[,inf_var:=10]
-
 
 data_hh[,tsi := t - infect_date_start]
 data_hh <- data_hh %>% mutate(scale=inf_var/inf_mean,
@@ -75,7 +72,7 @@ p_pos <- ggplot(data_hh) +
 ## Look at probability positive over time and probability of getting recruited
 p_recruit <- ggplot(data_hh) + 
   geom_tile(aes(x=t,y=id_num, fill=prob_recruit)) +
-  geom_point(data=linelist,aes(x=onset_date,y=id_num),col="red",shape=8) +
+  #geom_point(data=linelist,aes(x=onset_date,y=id_num),col="red",shape=8) +
   theme_minimal() +
   ylab("Individual ID") +
   xlab((paste0("Time (per ",dt, " days)"))) +
@@ -124,7 +121,6 @@ for(t in seq_along(timeframe)){
     
     }
   }
-data_hh_store <- data_hh
 ########################################
 # Simulate household testing
 ########################################
@@ -144,7 +140,7 @@ data_hh <- data_hh %>%
   filter(t >= date_detected) %>%
   ungroup() %>% 
   group_by(id_num) %>%
-  filter(t %in% (test_intervals + date_detected) | (t == date_detected & id_num %in% as.numeric(str_split(index_hh,",")[[1]])) )%>%
+  filter(t %in% (test_intervals + date_detected[1]) | (t == date_detected[1] & id_num %in% as.numeric(str_split(index_hh,",")[[1]])) )%>%
   ungroup()
 
 data_hh$test_outcome <- runif(nrow(data_hh)) < data_hh$prob_test_pos

@@ -104,7 +104,6 @@ g <- infected |>
 ggsave("simulation/outputs/fig_daily_infections_by_age_group.png", g)
 
 
-
 who_stats <- simulated |>
   group_by(house_id) |>
   summarise(size = n(), n = sum(status)) |>

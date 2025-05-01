@@ -71,7 +71,7 @@ expand_linelist <- function(linelist, dt, tmax,round_dates=FALSE){
 }
 
 assign_numeric_indiv_key <- function(linelist){
-  indiv_key <- linelist %>% select(id, infec_date) %>% 
+  indiv_key <- linelist %>% select(id, house_id,infec_date) %>% 
     arrange(infec_date) %>% distinct() %>% 
     mutate(id_num = 1:n())
   linelist <- linelist %>% left_join(indiv_key)
