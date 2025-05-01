@@ -25,10 +25,15 @@ probability_recruit <- function(linelist_i, symptom_based=TRUE, test_based=TRUE,
   return(prob_recruit*probability_enrollment)
 }
 
+
 probability_positive <- function(tsi, inf_mean, inf_var, design=list(test_pos_height=1)){
   pars <- jahR::convert_dist_pars(dist="gamma",mean_par=inf_mean,var_par=inf_var)
   ## Probability of being positive given TSI
   prob_pos <- design$test_pos_height*dgamma(tsi, shape=pars$pars["shape"], scale=pars$pars["scale"])
   return(prob_pos)
+}
+
+resolve_coprimaries <- function(household){
+  
 }
 
