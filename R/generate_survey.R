@@ -81,8 +81,8 @@ p_recruit <- ggplot(data_hh) +
   xlab((paste0("Time (per ",dt, " days)"))) +
   scale_fill_viridis_c() +
   theme(legend.position="bottom")
-p1 | p_pos | p_recruit
-
+p_all <- p1 | p_pos | p_recruit
+ggsave("figures/linelist_expansion.png", p_all, width=10, height=10, dpi=300)
 ########################################
 # simulate recruitment process
 ########################################
@@ -150,3 +150,11 @@ data_hh <- data_hh %>%
 data_hh$test_outcome <- runif(nrow(data_hh)) < data_hh$prob_test_pos
 
 ggplot(data_hh) + geom_tile(aes(x=t,y=id_num,fill=test_outcome))
+
+## Add date noising
+data_hh_report <- data_hh %>% select(id,id_num,house_id, house_id_num, t, onset_date, test_outcome)
+data_hh_report <- data_hh_report %>% mutate(onset_date = floor(onset_date),
+                                            t=floor(t)) %>%
+  mutate(is_symp = !is.na(onset_date))
+
+write_csv(data_hh_report, "data/simulated_perfect_survey.csv")
