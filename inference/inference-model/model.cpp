@@ -12,6 +12,9 @@
 
 #include "model.h"
 
+// #define COMPLETE_MODEL_DRAFT
+
+#ifdef COMPLETE_MODEL_DRAFT
 // use the EPI curve for the community contribution
 std::vector<double> Date_EPI_Curve = {};
 std::vector<double> Inst_EPI_Curve = {};
@@ -22,7 +25,6 @@ std::vector<double> Cumul_EPI_Curve = {};
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 /* Read EPI curve from csv file. */
-// FIXME is this really csv??
 void epi_curve_read_csv(std::string pathtofile)
 {
 	double date, inst_val, cumul_val;
@@ -81,6 +83,7 @@ double epi_curve_inst(double t) { return interpolate_by_date(t, Inst_EPI_Curve);
 
 /* Interpolated value of the cumulative epi curve. */
 double epi_curve_cumul(double t) { return interpolate_by_date(t, Cumul_EPI_Curve); }
+#endif
 
 //------------------------------------------------------------------------------------------------------------//
 //------------------------------------------------------------------------------------------------------------//
@@ -92,6 +95,7 @@ double epi_curve_cumul(double t) { return interpolate_by_date(t, Cumul_EPI_Curve
 /* Assign the contact patterns between a pair of individuals. */
 void Model::assign_contact_rate_to_household(Household &house, indiv from, indiv to)
 {
+#ifdef COMPLETE_MODEL_DRAFT
 	const bool from_child = house.data(from, "age") <= 15;
 	const bool from_senior = house.data(from, "age") >= 65;
 	const bool from_adult = (!from_child) && (!from_senior);
@@ -126,6 +130,12 @@ void Model::assign_contact_rate_to_household(Household &house, indiv from, indiv
 
 	else
 		emplace_contact_rate(MISSING_RATE);
+#else
+	UNUSED(house);
+	UNUSED(from);
+	UNUSED(to);
+	emplace_contact_rate(REFERENCE);
+#endif
 }
 
 //------------------------------------------------------------------------------------------------------------//
@@ -163,7 +173,8 @@ void Model::init_infec_profile()
 	assign_template_infec_profile({{"name", "reparam_gamma"},
 								   {"arg_name", "mean/var"},
 								   {"arg_value", "2/1"},
-								   {"arg_at", "S/S"}});
+								   {"arg_at", "S/S"},
+								   {"discrete", "TRUE"}});
 }
 
 /* Initialize parameters and augmented variables. */
@@ -176,9 +187,10 @@ void Model::init_model_for_inference()
 	allocate_extra_house_double_matrix("inst");
 	allocate_extra_house_double_matrix("cumul");
 
+#ifdef COMPLETE_MODEL_DRAFT
 	// read epi curve from csv file
 	epi_curve_read_csv("epi-curve.csv");
-	std::exit(EXIT_FAILURE);
+#endif
 }
 
 /* Initialize parameters and augmented variables. */
@@ -187,7 +199,7 @@ void Model::init_model_for_simulation()
 	init_model_for_inference();
 }
 
-/* [CHANGE-ME] Transmission rate. */
+/* Transmission rate. */
 double Model::transmission_rate(Household &house) const
 {
 	return param("beta") * std::pow(param("size_ref") / house.size(), param("gamma"));
@@ -197,10 +209,10 @@ double Model::transmission_rate(Household &house) const
 double Model::loglike_healthy(Household &house) const
 {
 	const indiv i0 = house.extra_integer_vector("intro_case")[0];
-	const double t0 = house.augm(i0, "incub_period") - house.augm(i0, "incub_period");
+	const double t0 = house.augm(i0, "first_pos_date") - house.augm(i0, "delay_period");
 	const double tf = t0 + param("study_period");
 
-	const double a_cumul = param("alpha");
+	const double a = param("alpha");
 	const double b = transmission_rate(house);
 
 	// load pre-compute inefctivity profiles
@@ -216,7 +228,12 @@ double Model::loglike_healthy(Household &house) const
 		roi_cumul_i *= house.group_rate(i, "susceptibility") * b;
 		output -= roi_cumul_i;
 	}
-	output -= a_cumul * (epi_curve_cumul(tf) - epi_curve_cumul(t0)) * house.n_healthy_status();
+
+#ifdef COMPLETE_MODEL_DRAFT
+	output -= a * (epi_curve_cumul(tf) - epi_curve_cumul(t0)) * house.n_healthy_status();
+#else
+	output -= a * (tf - t0) * house.n_healthy_status();
+#endif
 
 	return output;
 }
@@ -226,7 +243,7 @@ double Model::loglike_infectious(Household &house) const
 {
 	double output = 0.;
 	const indiv i0 = house.extra_integer_vector("intro_case")[0];
-	const double t0 = house.augm(i0, "onset_date") - house.augm(i0, "incub_period");
+	const double t0 = house.augm(i0, "first_pos_date") - house.augm(i0, "delay_period");
 
 	const auto &inst_mtx = house.extra_double_matrix("inst");
 	const auto &cumul_mtx = house.extra_double_matrix("cumul");
@@ -252,11 +269,16 @@ double Model::loglike_infectious(Household &house) const
 			roi_cumul_i *= b_i;
 
 			// Risk of infection from community
-			double t_infec_i = house.augm(i, "onset_date") - house.augm(i, "incub_period");
+			double t_infec_i = house.augm(i, "first_pos_date") - house.augm(i, "delay_period");
+
+#ifdef COMPLETE_MODEL_DRAFT
 			roi_inst_i += a * epi_curve_inst(t_infec_i);
 			roi_cumul_i += a * (epi_curve_cumul(t_infec_i) - epi_curve_cumul(t0));
-
-			output += std::log(roi_inst_i) - roi_cumul_i;
+#else
+			roi_inst_i += a;
+			roi_cumul_i += a * (t_infec_i - t0 - 1);
+#endif
+			output += std::log(1. - std::exp(-roi_inst_i)) - roi_cumul_i;
 		}
 
 	return output;
@@ -271,8 +293,8 @@ double Model::loglike_infectious(Household &house) const
    WARNING: this function should not call any mutable parameter. */
 void Model::update_extra_dependecies(Household &house, indiv i)
 {
-	const double onset_i = house.augm(i, "onset_date");
-	const double incub_i = house.augm(i, "incub_period");
+	const double onset_i = house.augm(i, "first_pos_date");
+	const double incub_i = house.augm(i, "delay_period");
 	const double t_infec_i = onset_i - incub_i;
 
 	auto &inst_mtx = house.extra_double_matrix("inst");
@@ -295,19 +317,19 @@ void Model::update_extra_dependecies(Household &house, indiv i)
 			inst_mtx[k][i] = 0.0;
 			cumul_mtx[k][i] = 0.0;
 
-			double incub_k = house.augm(k, "incub_period");
-			double t_infec_k = house.augm(k, "onset_date") - incub_k;
+			double incub_k = house.augm(k, "delay_period");
+			double t_infec_k = house.augm(k, "first_pos_date") - incub_k;
 			double gentime = t_infec_k - t_infec_i;
 
 			if (gentime > 0)
 			{ //----- `i` : infector, `k` : infectee -----//
-				inst_mtx[i][k] = infec_profile_inst(gentime, {incub_i});
-				cumul_mtx[i][k] = infec_profile_cumul(gentime, {incub_i});
+				inst_mtx[i][k] = infec_profile_inst(gentime);
+				cumul_mtx[i][k] = infec_profile_cumul(gentime -1);
 			}
 			else if (gentime < 0)
 			{ //----- `k` : infector, `i` : infectee -----//
-				inst_mtx[k][i] = infec_profile_inst(-gentime, {incub_k});
-				cumul_mtx[k][i] = infec_profile_cumul(-gentime, {incub_k});
+				inst_mtx[k][i] = infec_profile_inst(-gentime);
+				cumul_mtx[k][i] = infec_profile_cumul(-gentime - 1);
 
 				//----- update first case -----//
 				if (t_infec_k < new_t0)
@@ -326,10 +348,10 @@ void Model::update_extra_dependecies(Household &house, indiv i)
 	//===== Susceptible Members =====//
 	//===============================//
 
-	double exposure = param("study_period") + house.augm(i0, "onset_date") - t_infec_i;
+	double exposure = param("study_period") + house.augm(i0, "first_pos_date") - t_infec_i;
 	for (indiv k : house.healthy_status_list())
 	{
-		cumul_mtx[i][k] = infec_profile_cumul(exposure, {incub_i});
+		cumul_mtx[i][k] = infec_profile_cumul(exposure);
 		cumul_mtx[k][i] = 0.0;
 	}
 }
@@ -371,14 +393,18 @@ double Model::roi_inst_simulation(const std::vector<indiv> &infectors,
 	for (indiv k : infectors)
 	{
 		// `k` : infector, `i` : infectee
-		double incub_k = house.augm(k, "incub_period");
-		double gentime = t_infec_i - house.augm(k, "onset_date") + incub_k;
+		double incub_k = house.augm(k, "delay_period");
+		double gentime = t_infec_i - house.augm(k, "first_pos_date") + incub_k;
 		double mu_ki = house.contact_rate(k, i) * house.group_rate(k, "infectivity");
 		hh_roi_inst += infec_profile_inst(gentime, {incub_k}) * mu_ki;
 	}
 	hh_roi_inst *= house.group_rate(i, "susceptibility") * transmission_rate(house);
 
+#ifdef COMPLETE_MODEL_DRAFT
 	return param("alpha") * epi_curve_inst(t_infec_i) + hh_roi_inst;
+#else
+	return param("alpha") + hh_roi_inst;
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -388,8 +414,6 @@ double Model::roi_inst_simulation(const std::vector<indiv> &infectors,
 /* Poisson point process to simulate outbreak in a single household. */
 void Model::simulate_single_house(Household &house)
 {
-	const double Dt = 0.05;
-
 	//=================================================//
 	//===== GENERATION 0 : by single introduction =====//
 	//=================================================//
@@ -416,26 +440,26 @@ void Model::simulate_single_house(Household &house)
 	//=============================================================//
 
 	// first infection occuring at time t = 0
-	const double t0 = house.augm(i0, "onset_date") - house.augm(i0, "incub_period");
-	const double tf = house.augm(i0, "onset_date") + param("study_period");
+	const double t0 = house.augm(i0, "first_pos_date") - house.augm(i0, "delay_period");
+	const double tf = house.augm(i0, "first_pos_date") + param("study_period");
 
 	// infection of secondary cases following the first case
-	for (double t = t0 + Dt; (t < tf) && (house.n_healthy_status() > 0); t += Dt)
+	for (double t = t0 + 1; (t < tf) && (house.n_healthy_status() > 0); t += 1)
 	{
 		// store a copy of the vector of infected individuals
 		const std::vector<indiv> infectors = house.infected_status_list();
 
 		for (indiv i : house.healthy_status_list())
-			if (uniform() >= exp(-roi_inst_simulation(infectors, house, i, t) * Dt))
+			if (uniform() >= exp(-roi_inst_simulation(infectors, house, i, t)))
 			{
-				house.set_augm_value(i, "onset_date", t + house.augm(i, "incub_period"));
+				house.set_augm_value(i, "first_pos_date", t + house.augm(i, "delay_period"));
 				house.change_status(i, INFECTED_STATUS);
 			}
 	}
 
 	// format infected with unseen onset as healthy
 	for (indiv i : house.infected_status_list())
-		if (house.augm(i, "onset_date") >= tf)
+		if (house.augm(i, "first_pos_date") >= tf)
 			house.change_status(i, HEALTHY_STATUS);
 
 	// format all augmented variables of susceptibles

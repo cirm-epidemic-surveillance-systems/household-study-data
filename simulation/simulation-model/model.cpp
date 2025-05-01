@@ -22,7 +22,6 @@ std::vector<double> Cumul_EPI_Curve = {};
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 /* Read EPI curve from csv file. */
-// FIXME is this really csv??
 void epi_curve_read_csv(std::string pathtofile)
 {
 	std::ifstream input(pathtofile.c_str());
@@ -139,20 +138,42 @@ void Model::assign_contact_rate_to_household(Household &house, indiv from, indiv
 void Model::assign_group_rate_to_individual(Household &house, indiv i)
 {
 	rateID r;
-	UNUSED(house);
-	UNUSED(i);
+	const bool is_child = house.data(i, "age") <= 15;
+	const bool is_senior = house.data(i, "age") >= 65;
+	const bool is_adult = (!is_child) && (!is_senior);
 
 	//----- community -----//
 	r = "community";
-	emplace_group_rate(r, REFERENCE);
+	if (is_child)
+		emplace_group_rate(r, "com_child");
+	else if (is_adult)
+		emplace_group_rate(r, REFERENCE);
+	else if (is_senior)
+		emplace_group_rate(r, "com_senior");
+	else
+		emplace_group_rate(r, MISSING_RATE);
 
 	//----- infectivity -----//
 	r = "infectivity";
-	emplace_group_rate(r, REFERENCE);
+	if (is_child)
+		emplace_group_rate(r, "inf_child");
+	else if (is_adult)
+		emplace_group_rate(r, REFERENCE);
+	else if (is_senior)
+		emplace_group_rate(r, "inf_senior");
+	else
+		emplace_group_rate(r, MISSING_RATE);
 
 	//----- susceptibility -----//
 	r = "susceptibility";
-	emplace_group_rate(r, REFERENCE);
+	if (is_child)
+		emplace_group_rate(r, "sus_child");
+	else if (is_adult)
+		emplace_group_rate(r, REFERENCE);
+	else if (is_senior)
+		emplace_group_rate(r, "sus_senior");
+	else
+		emplace_group_rate(r, MISSING_RATE);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -191,7 +212,7 @@ double Model::compute_house_obs_loglike(Household &house) const
 //////////////////////////// Model : risk of infection for simulation  ////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-/* [CHANGE-ME] Transmission rate. */
+/* Transmission rate. */
 double Model::transmission_rate(Household &house) const
 {
 	return param("beta") * std::pow(param("size_ref") / house.size(), param("gamma"));
