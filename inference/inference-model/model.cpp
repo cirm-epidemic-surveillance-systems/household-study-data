@@ -12,79 +12,6 @@
 
 #include "model.h"
 
-// #define COMPLETE_MODEL_DRAFT
-
-#ifdef COMPLETE_MODEL_DRAFT
-// use the EPI curve for the community contribution
-std::vector<double> Date_EPI_Curve = {};
-std::vector<double> Inst_EPI_Curve = {};
-std::vector<double> Cumul_EPI_Curve = {};
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////  epi curve  ///////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-/* Read EPI curve from csv file. */
-void epi_curve_read_csv(std::string pathtofile)
-{
-	double date, inst_val, cumul_val;
-
-	std::ifstream input(pathtofile.c_str());
-	if (input.is_open())
-	{
-		// load instantaneous value of the epi curve
-		for (std::string line; getline(input, line, ',');)
-		{
-			std::istringstream iss(line);
-
-			// Store information in variables
-			iss >> date >> inst_val;
-			Date_EPI_Curve.push_back(date);
-			Inst_EPI_Curve.push_back(inst_val);
-		}
-
-		// store the cumulative epi curve
-		Cumul_EPI_Curve[0] = Inst_EPI_Curve[0];
-		for (size_t i = 1; i < Inst_EPI_Curve.size(); ++i)
-			Cumul_EPI_Curve[i] = Inst_EPI_Curve[i] + Cumul_EPI_Curve[i - 1];
-	}
-	else
-		tools::error("Impossible to read file: " + pathtofile + ".");
-}
-
-/* Linear interpolation by date. */
-double interpolate_by_date(double x0, const std::vector<double> &y)
-{
-	const std::vector<double> &x = Date_EPI_Curve; // alias
-
-	if (x0 <= x.front()) // saturate to lower value
-		return y.front();
-	else if (x0 >= x.back()) // saturate to upper value
-		return y.back();
-	else // calculate the interpolated y value
-	{
-		// bisection
-		size_t i = 0;			 // lower bound
-		size_t u = x.size() - 1; // upper bound
-		while (u - i > 1)
-		{
-			size_t mid = i + (u - i) / 2;
-			if (x[mid] <= x0)
-				i = mid;
-			else
-				u = mid;
-		}
-		return y[i] + (x0 - x[i]) * (y[i + 1] - y[i]) / (x[i + 1] - x[i]);
-	}
-}
-
-/* Interpolated value of the instantaneous epi curve. */
-double epi_curve_inst(double t) { return interpolate_by_date(t, Inst_EPI_Curve); }
-
-/* Interpolated value of the cumulative epi curve. */
-double epi_curve_cumul(double t) { return interpolate_by_date(t, Cumul_EPI_Curve); }
-#endif
-
 //------------------------------------------------------------------------------------------------------------//
 //------------------------------------------------------------------------------------------------------------//
 //------------------------------------------------------------------------------------------------------------//
@@ -95,47 +22,10 @@ double epi_curve_cumul(double t) { return interpolate_by_date(t, Cumul_EPI_Curve
 /* Assign the contact patterns between a pair of individuals. */
 void Model::assign_contact_rate_to_household(Household &house, indiv from, indiv to)
 {
-#ifdef COMPLETE_MODEL_DRAFT
-	const bool from_child = house.data(from, "age") <= 15;
-	const bool from_senior = house.data(from, "age") >= 65;
-	const bool from_adult = (!from_child) && (!from_senior);
-
-	const bool to_child = house.data(from, "age") <= 15;
-	const bool to_senior = house.data(from, "age") >= 65;
-	const bool to_adult = (!to_child) && (!to_senior);
-
-	// from is a child
-	if (from_child && to_child)
-		emplace_contact_rate("ctct_child2child");
-	else if (from_child && to_adult)
-		emplace_contact_rate("ctct_child2adult");
-	else if (from_child && to_senior)
-		emplace_contact_rate("ctct_child2senior");
-
-	// from is an adult
-	else if (from_adult && to_child)
-		emplace_contact_rate("ctct_adu2child");
-	else if (from_adult && to_adult)
-		emplace_contact_rate(REFERENCE);
-	else if (from_adult && to_senior)
-		emplace_contact_rate("ctct_adu2senior");
-
-	// from is an adult
-	else if (from_child && to_child)
-		emplace_contact_rate("ctct_senior2child");
-	else if (from_child && to_adult)
-		emplace_contact_rate("ctct_senior2adult");
-	else if (from_child && to_senior)
-		emplace_contact_rate("ctct_senior2senior");
-
-	else
-		emplace_contact_rate(MISSING_RATE);
-#else
 	UNUSED(house);
 	UNUSED(from);
 	UNUSED(to);
 	emplace_contact_rate(REFERENCE);
-#endif
 }
 
 //------------------------------------------------------------------------------------------------------------//
@@ -186,11 +76,6 @@ void Model::init_model_for_inference()
 	// matrices for the instantaneous and cumulative infectivity profiles
 	allocate_extra_house_double_matrix("inst");
 	allocate_extra_house_double_matrix("cumul");
-
-#ifdef COMPLETE_MODEL_DRAFT
-	// read epi curve from csv file
-	epi_curve_read_csv("epi-curve.csv");
-#endif
 }
 
 /* Initialize parameters and augmented variables. */
@@ -227,13 +112,8 @@ double Model::loglike_healthy(Household &house) const
 			roi_cumul_i += cumul_mtx[k][i] * house.contact_rate(k, i) * house.group_rate(k, "infectivity");
 		roi_cumul_i *= house.group_rate(i, "susceptibility") * b;
 		output -= roi_cumul_i;
+		output -= a * (tf - t0) * house.group_rate(i, "community");
 	}
-
-#ifdef COMPLETE_MODEL_DRAFT
-	output -= a * (epi_curve_cumul(tf) - epi_curve_cumul(t0)) * house.n_healthy_status();
-#else
-	output -= a * (tf - t0) * house.n_healthy_status();
-#endif
 
 	return output;
 }
@@ -270,14 +150,8 @@ double Model::loglike_infectious(Household &house) const
 
 			// Risk of infection from community
 			double t_infec_i = house.augm(i, "first_pos_date") - house.augm(i, "delay_period");
-
-#ifdef COMPLETE_MODEL_DRAFT
-			roi_inst_i += a * epi_curve_inst(t_infec_i);
-			roi_cumul_i += a * (epi_curve_cumul(t_infec_i) - epi_curve_cumul(t0));
-#else
-			roi_inst_i += a;
-			roi_cumul_i += a * (t_infec_i - t0 - 1);
-#endif
+			roi_inst_i += a * house.group_rate(i, "community");
+			roi_cumul_i += a * (t_infec_i - t0 - 1) * house.group_rate(i, "community");
 			output += std::log(1. - std::exp(-roi_inst_i)) - roi_cumul_i;
 		}
 
@@ -324,7 +198,7 @@ void Model::update_extra_dependecies(Household &house, indiv i)
 			if (gentime > 0)
 			{ //----- `i` : infector, `k` : infectee -----//
 				inst_mtx[i][k] = infec_profile_inst(gentime);
-				cumul_mtx[i][k] = infec_profile_cumul(gentime -1);
+				cumul_mtx[i][k] = infec_profile_cumul(gentime - 1);
 			}
 			else if (gentime < 0)
 			{ //----- `k` : infector, `i` : infectee -----//
@@ -400,11 +274,7 @@ double Model::roi_inst_simulation(const std::vector<indiv> &infectors,
 	}
 	hh_roi_inst *= house.group_rate(i, "susceptibility") * transmission_rate(house);
 
-#ifdef COMPLETE_MODEL_DRAFT
-	return param("alpha") * epi_curve_inst(t_infec_i) + hh_roi_inst;
-#else
-	return param("alpha") + hh_roi_inst;
-#endif
+	return param("alpha") * house.group_rate(i, "community") + hh_roi_inst;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
