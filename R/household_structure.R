@@ -15,20 +15,28 @@ read_dhs_data <- function(path) {
 
 
 # Bootstrap n household structures
-sample_households <- function(n, data) {
-  n_hh <- max(data$house_id)
-  idx_hh <- sample.int(n_hh, n)
+sample_households <- function(n, data, max_size = Inf) {
 
-  data |>
-    dplyr::filter(house_id %in% idx_hh) |>
-    dplyr::group_by(house_id) |>
-    dplyr::mutate(house_id = dplyr::cur_group_id())
+  list_hh <- dplyr::filter(data, size <= max_size) |>
+    group_by(house_id) |>
+    group_split()
+
+  idx_hh <- sample.int(length(list_hh), n, replace = TRUE)
+
+  ret <- list_hh[idx_hh]
+
+  ret |>
+    bind_rows(.id = "new_hh_id") |>
+    dplyr::transmute(id = id,
+                     house_id = new_hh_id,
+                     age = age,
+                     size = size)
 }
 
 # Plot household structure data set
 plot_households <- function(data) {
 
-  n_hh <- max(data$house_id)
+  n_hh <- max(as.integer(data$house_id))
   n <- nrow(data)
 
   g_age <- data |>
