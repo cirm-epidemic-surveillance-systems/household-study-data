@@ -47,6 +47,7 @@ probability_positive <- function(tsi, shape, scale, design=list(test_pos_height=
   #pars <- gamma_mean_var_to_shape_scale(mean_par=inf_mean,var_par=inf_var)
   ## Probability of being positive given TSI
   prob_pos <- design$test_pos_height*dgamma(tsi, shape=shape, scale=scale)
+  prob_pos <- pmin(1, prob_pos)
   return(prob_pos)
 }
 
@@ -94,4 +95,9 @@ gamma_mean_var_to_shape_scale <- function(mean_par, var_par){
   scale <- var_par/mean_par
   shape <- mean_par/scale
   return(c(shape=shape,scale=scale))
+}
+
+find_alpha_new <- function(mode, var_target) {
+  f <- function(a) a * (mode / (a - 1))^2 - var_target
+  uniroot(f, lower = 1 + 1e-6, upper = 1e6)$root
 }
