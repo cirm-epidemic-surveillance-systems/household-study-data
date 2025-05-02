@@ -204,7 +204,11 @@ data_hh_report <- data_hh_report %>% mutate(onset_date = floor(onset_date),
   mutate(is_symp = !is.na(onset_date))
 
 ## Remove onsets after testing period
-data_hh <- data_hh %>% mutate(onset_date = if_else(t > test_max+test_delay,NA_real_,onset_date))
+data_hh_report <- data_hh_report %>% 
+  group_by(house_id) %>%
+  mutate(end_study_date=max(t)) %>%
+  ungroup() %>%
+  mutate(onset_date = if_else(onset_date > end_study_date,NA,onset_date))
 
 ## Save dataset
 write_csv(data_hh_report, "data/simulated_perfect_survey.csv")
