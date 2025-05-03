@@ -42,6 +42,10 @@ void Model::assign_group_rate_to_individual(Household &house, indiv i)
 	UNUSED(house);
 	UNUSED(i);
 
+	//----- community -----//
+	r = "community";
+	emplace_group_rate(r, REFERENCE);
+
 	//----- infectivity -----//
 	r = "infectivity";
 	emplace_group_rate(r, REFERENCE);
