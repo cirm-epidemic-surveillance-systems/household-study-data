@@ -28,18 +28,19 @@ public:
 	double loglike_healthy(Household &house) const;
 	double loglike_infectious(Household &house) const;
 	double roi_inst_simulation(const std::vector<indiv> &infectors,
-							   Household &house, indiv i, double t_infec_i) const;
+							   Household &house, 
+							   Individual & member_i, double t_infec_i) const;
 
 	//===== Override General Methods =====//
 	void init_infec_profile() override final;
 	void init_model_for_inference() override final;
 	void init_model_for_simulation() override final;
-	void update_extra_dependecies(Household &house, indiv i) override final;
+	void update_cache_dependecies(Household &house, indiv i) override final;
 	double compute_house_obs_loglike(Household &house) const override final;
 	void simulate_single_house(Household &house) override final;
 
 	//----- Rate Choices -----//
-	void assign_group_rate_to_individual(Household &house, indiv i) override final;
+	void assign_group_rate_to_individual(Individual &member) override final;
 	void assign_contact_rate_to_household(Household &house, indiv from, indiv to) override final;
 };
 

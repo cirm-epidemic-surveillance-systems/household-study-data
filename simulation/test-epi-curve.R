@@ -11,8 +11,9 @@ options(scipen = 100)
 x <- seq(0, 365, 1)
 y <- dlnorm(x, meanlog = 4.5, sdlog = 0.4)
 df <- data.frame(date = x, inst = y)
-write.table(df, "simulation/epi-curve.csv", row.names = FALSE, quote = FALSE,
-            col.names = F, sep = ",")
+write.table(df, "simulation/epi-curve.csv",
+            row.names = FALSE, quote = FALSE,
+            col.names = FALSE, sep = ",")
 
 ggplot(df, aes(x = date, y = inst)) +
   geom_line()
@@ -49,11 +50,17 @@ hhmodel$load_param_list(
 
 hhmodel$load_augm_list(
   infec_date = 1000,
-  onset_date = 1000,
+  incub_period = list(model = "gamma_meanvar", args = c(mean = 3, var = 0.75)),
+  onset_date = "infec_date + incub_period",
   recov_date = 1000,
-  incub_period = list(model="reparam_gamma", args = c(mean = 3, var = 0.75)),
   ip_mean = list(model = "unif", args = c(min = 2, max = 4)),
   ip_var = list(model = "unif", args = c(min = 0.5, max = 2))
+)
+
+# individual infectivity profile
+hhmodel$add_infec_profile(
+  name = "gamma_meanvar",
+  args = c(mean = "ip_mean", var = "ip_var")
 )
 
 # bootstrap dhs household data
